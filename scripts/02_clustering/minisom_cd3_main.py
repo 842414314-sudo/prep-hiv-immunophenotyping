@@ -46,8 +46,8 @@ def bh_adjust(pvals):
     return adj
 
 # ============================================================
-BASE = 'FCS_DIR + "/"'
-outdir = 'OUTPUT_DIR'
+BASE = os.path.join(FCS_DIR, "")
+outdir = OUTPUT_DIR
 os.makedirs(outdir, exist_ok=True)
 
 # 14 clustering markers (including CD4/CD8 for lineage)

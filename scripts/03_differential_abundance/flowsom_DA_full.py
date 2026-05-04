@@ -43,10 +43,18 @@ from adjustText import adjust_text
 
 warnings.filterwarnings('ignore')
 
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# DATA_DIR: root of the data/ directory
+# OUTPUT_DIR: where DA results and figures will be saved
+# ======================================================================
+DATA_DIR   = '../data'
+OUTPUT_DIR = './output'
+
 # ============================================================
 # Config
 # ============================================================
-OUT_ROOT = 'OUTPUT_DIR'
+OUT_ROOT = OUTPUT_DIR
 os.makedirs(OUT_ROOT, exist_ok=True)
 
 GROUP_COLORS = {'HIV W0':'#FFCD65','HIV W48':'#808000','PrEP':'#3E0080','HC':'#008000'}
@@ -165,15 +173,16 @@ def label_cd8(prof_row, markers):
 # ============================================================
 def load_subset(name):
     if name == 'CD3':
-        freq_csv = 'DATA_DIR + "/"FlowSOM_metacluster_frequencies.csv'
-        anno_csv = 'FCS_DIR + "/"Fig/FlowSOM_MC_Annotation_Table.csv'
+        freq_csv = os.path.join(DATA_DIR, 'cd3', 'cd3_mc20_frequencies.csv')
+        da_csv = os.path.join(DATA_DIR, 'cd3', 'cd3_da_results.csv')
         df = pd.read_csv(freq_csv, index_col=0)
-        anno = pd.read_csv(anno_csv)
+        anno = pd.read_csv(da_csv)
         # Build label dict: 'MC1' → 'MC1 CD8+ Exh(TIM3+)'
-        label_map = dict(zip(anno['MC'], anno['label']))
+        label_map = dict(zip(anno['MC'], anno['label'])) if 'label' in anno.columns else {f'MC{i+1}': f'MC{i+1}' for i in range(20)}
     else:
-        freq_csv = f'OUTPUT_DIR/freq_{name}_MC10.csv'
-        prof_csv = f'OUTPUT_DIR/profiles_{name}_MC10.csv'
+        subset_lower = name.lower()
+        freq_csv = os.path.join(DATA_DIR, subset_lower, f'{subset_lower}_mc10_frequencies.csv')
+        prof_csv = os.path.join(DATA_DIR, subset_lower, f'{subset_lower}_mc10_profiles.csv')
         df = pd.read_csv(freq_csv, index_col=0)
         prof = pd.read_csv(prof_csv, index_col=0)
         markers = list(prof.columns)

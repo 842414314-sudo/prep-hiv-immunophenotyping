@@ -31,10 +31,9 @@ FCS_DIR    = './normalized_fcs'
 OUTPUT_DIR = './output'
 DATA_DIR   = '../data/cd3'
 
-
-
-BASE = 'FCS_DIR'
-FIG = os.path.join(BASE, 'Fig')
+BASE = FCS_DIR
+FIG = os.path.join(OUTPUT_DIR, 'Fig')
+os.makedirs(FIG, exist_ok=True)
 
 # Markers for clustering (same as original)
 MARKERS = ['CD4', 'CD8', 'CD45RA', 'CCR7', 'CD27', 'CD28', 'CD38', 'HLADR',
@@ -240,7 +239,7 @@ print("=" * 70)
 print("PART 1: Sensitivity analysis on existing 20-metacluster matrix")
 print("=" * 70)
 
-freq_existing = pd.read_csv(os.path.join(FIG, 'FlowSOM_metacluster_frequencies.csv'), index_col=0)
+freq_existing = pd.read_csv(os.path.join(DATA_DIR, 'cd3_mc20_frequencies.csv'), index_col=0)
 print(f"Existing matrix: {freq_existing.shape}")
 
 # Test different k values, metrics, linkage methods

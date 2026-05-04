@@ -2,9 +2,17 @@
 .libPaths(c("~/R/library", .libPaths()))
 library(ggplot2)
 
-outdir <- "output_dir"
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# data_dir: directory containing CD3 data CSVs
+# output_dir: where figures will be saved
+# ======================================================================
+data_dir   <- "../data/cd3"
+output_dir <- "./output"
 
-freq <- read.csv("file.path(data_dir, "cd3_mc20_frequencies.csv")",
+outdir <- output_dir
+
+freq <- read.csv(file.path(data_dir, "cd3_mc20_frequencies.csv"),
                  row.names = 1, check.names = FALSE)
 
 # Group assignment
@@ -32,8 +40,8 @@ make_volcano <- function(group_a, group_b, label_a, label_b, filename) {
     a <- group_a[, mc]
     b <- group_b[, mc]
     results$diff[i] <- mean(a) - mean(b)
-    tt <- t.test(a, b)
-    results$pval[i] <- tt$p.value
+    wt <- wilcox.test(a, b)
+    results$pval[i] <- wt$p.value
   }
 
   results$padj <- p.adjust(results$pval, method = "BH")

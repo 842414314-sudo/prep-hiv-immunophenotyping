@@ -19,8 +19,16 @@ from collections import defaultdict
 
 warnings.filterwarnings('ignore')
 
-BASE = 'FCS_DIR'
-OUT  = 'OUTPUT_DIR'
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# FCS_DIR: directory containing batch-normalized CD3+ FCS files
+# OUTPUT_DIR: where figures and results will be saved
+# ======================================================================
+FCS_DIR    = './normalized_fcs'
+OUTPUT_DIR = './output'
+
+BASE = FCS_DIR
+OUT  = OUTPUT_DIR
 os.makedirs(OUT, exist_ok=True)
 
 MARKERS = ['CD4','CD8','CD45RA','CCR7','CD28','CD27','CD95',
@@ -117,17 +125,6 @@ def get_group(l):
 def bootstrap_cocluster(freq_df, n_boot=1000, k=3, seed=SEED):
     """Per-pair co-clustering probability over bootstrap resamples."""
     np.random.seed(seed)
-
-# ======================================================================
-# USER CONFIG — update these paths to match your local setup
-# FCS_DIR: directory containing batch-normalized CD3+ FCS files
-# OUTPUT_DIR: where figures and results will be saved
-# ======================================================================
-FCS_DIR    = './normalized_fcs'
-OUTPUT_DIR = './output'
-DATA_DIR   = '../data/cd3'
-
-
     n = len(freq_df)
     cc = np.zeros((n,n))
     ct = np.zeros((n,n))

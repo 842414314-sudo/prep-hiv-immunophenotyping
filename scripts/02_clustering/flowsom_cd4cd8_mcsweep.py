@@ -41,11 +41,20 @@ from matplotlib.patches import Patch
 
 warnings.filterwarnings('ignore')
 
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# FCS_DIR: directory containing batch-normalized CD3+ FCS files
+# OUTPUT_DIR: where figures and results will be saved
+# ======================================================================
+FCS_DIR    = './normalized_fcs'
+OUTPUT_DIR = './output'
+DATA_DIR   = '../data/cd3'
+
 # ============================================================
 # Config
 # ============================================================
-B       = 'FCS_DIR'
-OUTDIR  = 'OUTPUT_DIR'
+B       = FCS_DIR
+OUTDIR  = OUTPUT_DIR
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED             = 42
@@ -126,16 +135,6 @@ print(f"CD4/CD8 FlowSOM MC-Sweep — reading {len(files)} files")
 print("="*70)
 
 np.random.seed(SEED)
-
-# ======================================================================
-# USER CONFIG — update these paths to match your local setup
-# FCS_DIR: directory containing batch-normalized CD3+ FCS files
-# OUTPUT_DIR: where figures and results will be saved
-# ======================================================================
-FCS_DIR    = './normalized_fcs'
-OUTPUT_DIR = './output'
-DATA_DIR   = '../data/cd3'
-
 
 all_cells_per_file = []   # list of (n_cells, 14) arrays
 sample_info        = []

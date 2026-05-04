@@ -31,12 +31,23 @@ from matplotlib.colors import LinearSegmentedColormap
 
 warnings.filterwarnings('ignore')
 
-fig_dir = 'FCS_DIR + "/"Fig'
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# FCS_DIR: directory containing batch-normalized CD3+ FCS files
+# OUTPUT_DIR: where figures and results will be saved
+# DATA_DIR: root of the data/ directory
+# ======================================================================
+FCS_DIR    = './normalized_fcs'
+OUTPUT_DIR = './output'
+DATA_DIR   = '../data'
+
+fig_dir = os.path.join(OUTPUT_DIR, 'Fig')
+os.makedirs(fig_dir, exist_ok=True)
 
 # ---------- load data ----------
-with open('OUTPUT_DIR + '/flowsom_results.pkl'','rb') as f:
+with open(os.path.join(OUTPUT_DIR, 'flowsom_results.pkl'), 'rb') as f:
     R = pickle.load(f)
-with open('OUTPUT_DIR + '/flowsom_mc_annotation.pkl'','rb') as f:
+with open(os.path.join(OUTPUT_DIR, 'flowsom_mc_annotation.pkl'), 'rb') as f:
     A = pickle.load(f)
 
 freq        = R['freq_matrix']              # (50, 20)

@@ -31,11 +31,19 @@ import matplotlib.patches as mpatches
 
 warnings.filterwarnings('ignore')
 
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# FCS_DIR: directory containing batch-normalized CD3+ FCS files
+# OUTPUT_DIR: where figures and results will be saved
+# ======================================================================
+FCS_DIR    = './normalized_fcs'
+OUTPUT_DIR = './output'
+
 # ============================================================
 # Configuration
 # ============================================================
-base    = 'FCS_DIR + "/"'
-fig_dir = os.path.join(base, 'Fig')
+base    = FCS_DIR
+fig_dir = os.path.join(OUTPUT_DIR, 'Fig')
 os.makedirs(fig_dir, exist_ok=True)
 
 SEED              = 42
@@ -53,7 +61,7 @@ print("=" * 60)
 print("STEP 1: Loading FlowSOM pickle")
 print("=" * 60)
 
-with open('OUTPUT_DIR + '/flowsom_results.pkl'', 'rb') as pf:
+with open(os.path.join(OUTPUT_DIR, 'flowsom_results.pkl'), 'rb') as pf:
     R = pickle.load(pf)
 
 som                    = R['som']
@@ -75,7 +83,7 @@ print("\n" + "=" * 60)
 print("STEP 2: Reading FCS files and subsampling cells for UMAP")
 print("=" * 60)
 
-with open('OUTPUT_DIR + '/flowsom_filelist.json'') as jf:
+with open(os.path.join(OUTPUT_DIR, 'flowsom_filelist.json')) as jf:
     file_list = json.load(jf)
 
 all_cells    = []
@@ -158,7 +166,7 @@ umap_df.to_csv(os.path.join(fig_dir, 'FlowSOM_UMAP_embedding.csv'), index=False)
 print(f"  Saved embedding: FlowSOM_UMAP_embedding.csv")
 
 # Cache embedding to pickle too
-with open('OUTPUT_DIR + '/flowsom_umap.pkl'', 'wb') as pf:
+with open(os.path.join(OUTPUT_DIR, 'flowsom_umap.pkl'), 'wb') as pf:
     pickle.dump({
         'emb'                  : emb,
         'cell_mc'              : cell_mc,

@@ -11,8 +11,16 @@ suppressMessages({
   library(grid)
 })
 
-indir   <- "data_dir"
-outdir  <- "data_dir"
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# data_dir: root of the data/ directory (contains cd4/, cd8/ subdirs)
+# output_dir: where figures will be saved
+# ======================================================================
+data_dir   <- "../data"
+output_dir <- "./output"
+
+indir   <- data_dir
+outdir  <- output_dir
 
 # ── Unified paper colors (SAME as CD3) ──
 group_colors <- c(
@@ -53,7 +61,8 @@ get_group <- function(s) {
 }
 
 make_dendro <- function(subset) {
-  csv_path <- file.path(indir, sprintf("freq_%s_MC10.csv", subset))
+  subset_lower <- tolower(subset)
+  csv_path <- file.path(indir, subset_lower, sprintf("%s_mc10_frequencies.csv", subset_lower))
   freq_df <- read.csv(csv_path, row.names = 1, check.names = FALSE)
   freq_mat <- as.matrix(freq_df)
 

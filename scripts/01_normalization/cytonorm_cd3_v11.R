@@ -4,6 +4,15 @@
 
 library(flowCore)
 
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# FCS_DIR: root directory containing B1/, B2/, B3/ subdirectories with
+#          CD3-gated FCS files exported from FlowJo
+# OUTPUT_DIR: where batch-normalized FCS files will be written
+# ======================================================================
+FCS_DIR    <- "/Library/Claude/CD3"
+OUTPUT_DIR <- path.expand("~/Desktop/normalized_CD3_v11")
+
 set.seed(42)
 cofactor <- 6000
 asinh_t <- function(x) asinh(x / cofactor)
@@ -18,7 +27,7 @@ cat("            (B3->B2 via P33+P44, then B2->B1 via P27+P33)\n")
 cat("  NOTE: 44HC is B2 (physically in B3 folder)\n")
 cat("============================================================\n\n")
 
-outdir <- path.expand("~/Desktop/normalized_CD3_v11")
+outdir <- OUTPUT_DIR
 dir.create(outdir, showWarnings = FALSE)
 dir.create(file.path(outdir, "B1"), showWarnings = FALSE)
 dir.create(file.path(outdir, "B2"), showWarnings = FALSE)
@@ -95,7 +104,7 @@ align_bimodal <- function(raw_values, ref_neg, ref_pos,
 
 # ── Step 1: Reference peaks from B1 W48 ──────────────────────────
 cat("Step 1: Computing reference peaks from B1 W48...\n")
-b1_w48 <- list.files("/Library/Claude/CD3/B1", pattern = "W48.*[.]fcs$", full.names = TRUE)
+b1_w48 <- list.files(file.path(FCS_DIR, "B1"), pattern = "W48.*[.]fcs$", full.names = TRUE)
 w48_pool <- list()
 for (f in b1_w48) {
   ff <- read.FCS(f, transformation = FALSE, truncate_max_range = FALSE)
@@ -142,12 +151,12 @@ get_medians <- function(path) {
 # ── 2a: B2→B1 shift from P27 + P33 ──
 cat("\n  --- B2->B1 shift (P27 + P33 bridges) ---\n")
 
-b1_p27 <- get_medians("/Library/Claude/CD3/B1/export_27 Basal_CD3 subset.fcs")
-b2_p27 <- get_medians("/Library/Claude/CD3/B2/export_27prep_CD3 subset.fcs")
+b1_p27 <- get_medians(file.path(FCS_DIR, "B1", "export_27 Basal_CD3 subset.fcs"))
+b2_p27 <- get_medians(file.path(FCS_DIR, "B2", "export_27prep_CD3 subset.fcs"))
 shift_b2_p27 <- b1_p27 - b2_p27
 
-b1_p33 <- get_medians("/Library/Claude/CD3/B1/export_33 Basal_CD3 subset.fcs")
-b2_p33 <- get_medians("/Library/Claude/CD3/B2/export_33prep_CD3 subset.fcs")
+b1_p33 <- get_medians(file.path(FCS_DIR, "B1", "export_33 Basal_CD3 subset.fcs"))
+b2_p33 <- get_medians(file.path(FCS_DIR, "B2", "export_33prep_CD3 subset.fcs"))
 shift_b2_p33 <- b1_p33 - b2_p33
 
 # Per-marker: if P27 and P33 have opposite signs, use P33 only
@@ -179,11 +188,11 @@ cat("\n")
 # ── 2b: B3→B2 shift from P33 + P44 ──
 cat("\n  --- B3->B2 shift (P33 + P44 bridges) ---\n")
 
-b3_p33 <- get_medians("/Library/Claude/CD3/B3/export_33_CD3 subset.fcs")
+b3_p33 <- get_medians(file.path(FCS_DIR, "B3", "export_33_CD3 subset.fcs"))
 shift_b3b2_p33 <- b2_p33 - b3_p33
 
-b2_p44 <- get_medians("/Library/Claude/CD3/B3/export_44HC_CD3 subset.fcs")  # 44HC is B2
-b3_p44 <- get_medians("/Library/Claude/CD3/B3/export_44_CD3 subset.fcs")
+b2_p44 <- get_medians(file.path(FCS_DIR, "B3", "export_44HC_CD3 subset.fcs"))  # 44HC is B2
+b3_p44 <- get_medians(file.path(FCS_DIR, "B3", "export_44_CD3 subset.fcs"))
 shift_b3b2_p44 <- b2_p44 - b3_p44
 
 # Per-marker: if P33 and P44 have opposite signs, use P33 only
@@ -231,7 +240,7 @@ cat("\n\nStep 3: Processing files...\n\n")
 
 # B1: reference, direct file copy (preserves original FCS format exactly)
 cat("--- B1 (reference, file copy) ---\n")
-b1_files <- list.files("/Library/Claude/CD3/B1", pattern = "[.]fcs$", full.names = TRUE)
+b1_files <- list.files(file.path(FCS_DIR, "B1"), pattern = "[.]fcs$", full.names = TRUE)
 for (f in b1_files) {
   bn <- basename(f)
   outpath <- file.path(outdir, "B1", paste0("norm_", bn))
@@ -242,8 +251,8 @@ for (f in b1_files) {
 # B2: peak alignment + median shift -> B1
 # Includes files from /Library/Claude/CD3/B2/ AND 44HC from B3 folder
 cat("\n--- B2 (peak alignment + median shift -> B1) ---\n")
-b2_files <- list.files("/Library/Claude/CD3/B2", pattern = "[.]fcs$", full.names = TRUE)
-b2_files <- c(b2_files, "/Library/Claude/CD3/B3/export_44HC_CD3 subset.fcs")
+b2_files <- list.files(file.path(FCS_DIR, "B2"), pattern = "[.]fcs$", full.names = TRUE)
+b2_files <- c(b2_files, file.path(FCS_DIR, "B3", "export_44HC_CD3 subset.fcs"))
 
 for (f in b2_files) {
   bn <- basename(f)
@@ -273,7 +282,7 @@ for (f in b2_files) {
 # B3: peak alignment + median shift -> B1 (via B2)
 # EXCLUDE 44HC (it's B2)
 cat("\n--- B3 (peak alignment + median shift -> B1) ---\n")
-b3_files <- list.files("/Library/Claude/CD3/B3", pattern = "[.]fcs$", full.names = TRUE)
+b3_files <- list.files(file.path(FCS_DIR, "B3"), pattern = "[.]fcs$", full.names = TRUE)
 b3_files <- b3_files[!grepl("44HC", b3_files)]
 
 for (f in b3_files) {
@@ -323,10 +332,10 @@ cat(sprintf("%-10s", ""))
 for (m in all_markers) cat(sprintf(" %7s", m))
 cat("\n")
 
-b1_m <- get_all_meds("/Library/Claude/CD3/B1/export_33 Basal_CD3 subset.fcs")
-b2_orig <- get_all_meds("/Library/Claude/CD3/B2/export_33prep_CD3 subset.fcs")
+b1_m <- get_all_meds(file.path(FCS_DIR, "B1", "export_33 Basal_CD3 subset.fcs"))
+b2_orig <- get_all_meds(file.path(FCS_DIR, "B2", "export_33prep_CD3 subset.fcs"))
 b2_norm <- get_all_meds(file.path(outdir, "B2/norm_export_33prep_CD3 subset.fcs"))
-b3_orig <- get_all_meds("/Library/Claude/CD3/B3/export_33_CD3 subset.fcs")
+b3_orig <- get_all_meds(file.path(FCS_DIR, "B3", "export_33_CD3 subset.fcs"))
 b3_norm <- get_all_meds(file.path(outdir, "B3/norm_export_33_CD3 subset.fcs"))
 
 cat(sprintf("%-10s", "B1"))
@@ -364,8 +373,8 @@ cat("--- P27 (B1 / B2) ---\n")
 cat(sprintf("%-10s", ""))
 for (m in all_markers) cat(sprintf(" %7s", m))
 cat("\n")
-b1_27 <- get_all_meds("/Library/Claude/CD3/B1/export_27 Basal_CD3 subset.fcs")
-b2_27o <- get_all_meds("/Library/Claude/CD3/B2/export_27prep_CD3 subset.fcs")
+b1_27 <- get_all_meds(file.path(FCS_DIR, "B1", "export_27 Basal_CD3 subset.fcs"))
+b2_27o <- get_all_meds(file.path(FCS_DIR, "B2", "export_27prep_CD3 subset.fcs"))
 b2_27n <- get_all_meds(file.path(outdir, "B2/norm_export_27prep_CD3 subset.fcs"))
 cat(sprintf("%-10s", "B1"))
 for (m in all_markers) cat(sprintf(" %+7.3f", b1_27[m]))
@@ -388,9 +397,9 @@ cat("--- P44 (B2[44HC] / B3[44]) ---\n")
 cat(sprintf("%-10s", ""))
 for (m in all_markers) cat(sprintf(" %7s", m))
 cat("\n")
-b2_44o <- get_all_meds("/Library/Claude/CD3/B3/export_44HC_CD3 subset.fcs")
+b2_44o <- get_all_meds(file.path(FCS_DIR, "B3", "export_44HC_CD3 subset.fcs"))
 b2_44n <- get_all_meds(file.path(outdir, "B2/norm_export_44HC_CD3 subset.fcs"))
-b3_44o <- get_all_meds("/Library/Claude/CD3/B3/export_44_CD3 subset.fcs")
+b3_44o <- get_all_meds(file.path(FCS_DIR, "B3", "export_44_CD3 subset.fcs"))
 b3_44n <- get_all_meds(file.path(outdir, "B3/norm_export_44_CD3 subset.fcs"))
 cat(sprintf("%-10s", "B2 bef"))
 for (m in all_markers) cat(sprintf(" %+7.3f", b2_44o[m]))
@@ -416,9 +425,9 @@ cat("--- P47 (B2 / B3) ---\n")
 cat(sprintf("%-10s", ""))
 for (m in all_markers) cat(sprintf(" %7s", m))
 cat("\n")
-b2_47o <- get_all_meds("/Library/Claude/CD3/B2/export_47HC_CD3 subset.fcs")
+b2_47o <- get_all_meds(file.path(FCS_DIR, "B2", "export_47HC_CD3 subset.fcs"))
 b2_47n <- get_all_meds(file.path(outdir, "B2/norm_export_47HC_CD3 subset.fcs"))
-b3_47o <- get_all_meds("/Library/Claude/CD3/B3/export_47_CD3 subset.fcs")
+b3_47o <- get_all_meds(file.path(FCS_DIR, "B3", "export_47_CD3 subset.fcs"))
 b3_47n <- get_all_meds(file.path(outdir, "B3/norm_export_47_CD3 subset.fcs"))
 cat(sprintf("%-10s", "B2 bef"))
 for (m in all_markers) cat(sprintf(" %+7.3f", b2_47o[m]))
@@ -444,9 +453,9 @@ cat("--- P43 (B2 / B3) ---\n")
 cat(sprintf("%-10s", ""))
 for (m in all_markers) cat(sprintf(" %7s", m))
 cat("\n")
-b2_43o <- get_all_meds("/Library/Claude/CD3/B2/export_43HC_CD3 subset.fcs")
+b2_43o <- get_all_meds(file.path(FCS_DIR, "B2", "export_43HC_CD3 subset.fcs"))
 b2_43n <- get_all_meds(file.path(outdir, "B2/norm_export_43HC_CD3 subset.fcs"))
-b3_43o <- get_all_meds("/Library/Claude/CD3/B3/export_43_CD3 subset.fcs")
+b3_43o <- get_all_meds(file.path(FCS_DIR, "B3", "export_43_CD3 subset.fcs"))
 b3_43n <- get_all_meds(file.path(outdir, "B3/norm_export_43_CD3 subset.fcs"))
 cat(sprintf("%-10s", "B2 bef"))
 for (m in all_markers) cat(sprintf(" %+7.3f", b2_43o[m]))

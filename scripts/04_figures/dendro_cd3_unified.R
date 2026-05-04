@@ -4,10 +4,18 @@
 library(pheatmap)
 library(grid)
 
-outdir <- "output_dir"
+# ======================================================================
+# USER CONFIG — update these paths to match your local setup
+# data_dir: directory containing CD3 data CSVs
+# output_dir: where figures will be saved
+# ======================================================================
+data_dir   <- "../data/cd3"
+output_dir <- "./output"
+
+outdir <- output_dir
 
 # Read frequency data
-freq_df <- read.csv("file.path(data_dir, "cd3_mc20_frequencies.csv")",
+freq_df <- read.csv(file.path(data_dir, "cd3_mc20_frequencies.csv"),
                     row.names = 1)
 freq_mat <- as.matrix(freq_df)
 
