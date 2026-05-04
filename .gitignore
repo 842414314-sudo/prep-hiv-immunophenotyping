@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pkl
+*.fcs
+.DS_Store
+._*
+output/
+*.Rhistory
+.Rproj.user/
