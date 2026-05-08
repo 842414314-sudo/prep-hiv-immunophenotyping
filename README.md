@@ -5,7 +5,7 @@ Analysis code and per-patient data tables accompanying the manuscript submitted 
 ## Overview
 
 This repository contains the custom scripts and processed data used to perform unsupervised clustering (MiniSom) and differential abundance analysis of CD3+ T cell subsets in:
-- Healthy controls (HC, n=13)
+- Healthy controls (HC, n=12)
 - PrEP users (n=10)
 - People living with HIV at baseline (W0, n=14) and after 48 weeks of ART (W48, n=14)
 
@@ -14,7 +14,7 @@ This repository contains the custom scripts and processed data used to perform u
 ```
 .
 ├── scripts/
-│   ├── 01_normalization/       # CytoNorm batch correction
+│   ├── 01_normalization/       # Custom batch normalization (peak alignment + median shift)
 │   ├── 02_clustering/          # MiniSom SOM + hierarchical metaclustering
 │   ├── 03_differential_abundance/  # Kruskal-Wallis + pairwise Mann-Whitney / Wilcoxon
 │   ├── 04_figures/             # Dendrograms (R pheatmap), UMAP, volcano plots
