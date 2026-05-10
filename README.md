@@ -59,7 +59,7 @@ Pairwise group comparisons with Benjamini-Hochberg FDR correction.
 
 ## Analysis Pipeline
 
-1. **Batch normalization** (`cytonorm_cd3_v11.R`): Peak alignment + median shift across 3 acquisition batches using bridge samples, applied to 9 markers on arcsinh-transformed (cofactor 6000) fluorescence values.
+1. **Batch normalization** (`batch_norm_cd3_v11.R`): Peak alignment + median shift across 3 acquisition batches using bridge samples, applied to 9 markers on arcsinh-transformed (cofactor 6000) fluorescence values.
 
 2. **Unsupervised clustering** (`minisom_cd3_main.py`): 14-marker MiniSom (10x10 SOM, seed 42) on 5000 cells/sample, Ward hierarchical linkage into 20 metaclusters. CD4/CD8 lineage split followed by independent 10-MC clustering.
 
