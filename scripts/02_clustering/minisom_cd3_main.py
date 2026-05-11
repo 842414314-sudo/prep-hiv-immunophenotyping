@@ -1,300 +1,360 @@
 #!/usr/bin/env python3
 """
-CD3 Main MiniSom Analysis — 50 files (P88 CMV- excluded)
-14 markers (incl CD4/CD8), 10x10 SOM, 20 MC
-StandardScaler, PCA init, Ward hierarchical
-Replaces the original ORIGINAL_flowsom_analysis.py
+CD3 MiniSom clustering — full pipeline
+=======================================
+Reads batch-normalized CD3+ FCS files (51 samples), trains a 14-marker
+MiniSom (10x10 SOM, seed 42), metaclusters into 20 MCs via Ward linkage,
+and saves complete intermediate artifacts (SOM model, scaler, per-cell
+MC assignments, per-sample MC frequencies) for downstream scripts
+(`minisom_umap.py`, dendrogram and volcano R scripts).
+
+Sample set
+----------
+SOM training uses all 51 samples (HC n=13, including P88) to maximise
+cluster stability. P88 is excluded prior to downstream differential
+abundance analysis. See README for details.
+
+Cohort definitions are hard-coded below to match the manuscript
+(HIV n=14 with W0/W48, PrEP n=10, HC n=13 incl. P88; P44HC excluded;
+bridge duplicates P27prep, P33prep removed).
+
+Pipeline
+--------
+1. Scan FCS_DIR/{B1,B2,B3} and build the 51-file list
+2. Read FCS, subsample 5000 cells/file
+3. StandardScale -> train MiniSom 10x10 (PCA init, seed 42)
+4. Assign cells to nodes
+5. Ward hierarchical metaclustering into 20 MCs
+6. Per-sample MC frequencies, MC marker profiles, heuristic lineage labels
+7. Save outputs (CSVs + pickle) to OUTPUT_DIR
 """
 
-import os, warnings, glob, re, pickle
+import os, re, json, pickle, warnings
 import numpy as np
 import pandas as pd
 import fcsparser
 from minisom import MiniSom
-from scipy.cluster.hierarchy import linkage, fcluster, dendrogram as dendro_plot
-from scipy.stats import kruskal, mannwhitneyu
+from scipy.cluster.hierarchy import linkage, fcluster
 from sklearn.preprocessing import StandardScaler
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Patch
 
 warnings.filterwarnings('ignore')
-np.random.seed(42)
 
 # ======================================================================
-# USER CONFIG — update these paths to match your local setup
-# FCS_DIR: directory containing batch-normalized CD3+ FCS files
-# OUTPUT_DIR: where figures and results will be saved
+# USER CONFIG -- update these paths to match your local setup
+# FCS_DIR    : root directory with B1/, B2/, B3/ subdirectories of
+#              batch-normalised CD3+ FCS files (output of
+#              `batch_norm_cd3_v11.R`; not included in this repo)
+# OUTPUT_DIR : where CSVs and the pickled results will be written
 # ======================================================================
 FCS_DIR    = './normalized_fcs'
 OUTPUT_DIR = './output'
-DATA_DIR   = '../data/cd3'
-
-
-
-def bh_adjust(pvals):
-    n = len(pvals)
-    si = np.argsort(pvals)
-    sp = np.array(pvals)[si]
-    adj = np.zeros(n)
-    cm = 1.0
-    for i in range(n-1, -1, -1):
-        cm = min(cm, sp[i]*n/(i+1))
-        adj[si[i]] = min(cm, 1.0)
-    return adj
 
 # ============================================================
-BASE = os.path.join(FCS_DIR, "")
-outdir = OUTPUT_DIR
-os.makedirs(outdir, exist_ok=True)
-
-# 14 clustering markers (including CD4/CD8 for lineage)
-clustering_markers = ['CD4','CD8','CD45RA','CCR7','CD27','CD28',
-                      'CD38','HLADR','TIM3','PD1','FOXP3','CD25',
-                      'CD127','CD95']
-
+# Pipeline configuration (do not edit unless reproducing a sweep)
+# ============================================================
+SEED             = 42
+SOM_X, SOM_Y     = 10, 10
+N_METACLUSTERS   = 20
 CELLS_PER_SAMPLE = 5000
-SOM_X, SOM_Y = 10, 10
-N_MC = 20
+
+clustering_markers = ['CD4', 'CD8', 'CD45RA', 'CCR7', 'CD27', 'CD28',
+                      'CD38', 'HLADR', 'TIM3', 'PD1', 'FOXP3', 'CD25',
+                      'CD127', 'CD95']
+
+# Cohort definitions (manuscript)
+HIV_PATIENTS  = [1, 3, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 20, 25]
+PREP_PATIENTS = [18, 19, 22, 23, 27, 28, 30, 31, 32, 33]
+HC_PATIENTS   = [39, 41, 43, 45, 46, 47, 70, 76, 80, 83, 85, 88, 100]
+# Notes:
+#   P44HC : excluded from clinical database
+#   P88HC : CMV-seropositive HC; retained for SOM training (HC n=13);
+#           excluded from primary downstream analyses (see README)
+#   P27prep, P33prep in B2: bridge duplicates -> skip
+#   P33, P43, P47 in B3   : duplicates of B1/B2 samples -> skip
+
+group_colors = {'HIV_W0':  '#FFCD65', 'HIV_W48': '#808000',
+                'PrEP':    '#3E0080', 'HC':      '#008000'}
+
+np.random.seed(SEED)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 
 # ============================================================
-# Build file list in ORIGINAL order (B1 → B2 → B3)
-print("="*60)
-print("CD3 Main MiniSom — 14 markers, 20 MC, 50 files")
-print("="*60)
+# Step 1: Build the file list from FCS_DIR/{B1,B2,B3}
+# ============================================================
+print("=" * 60)
+print("STEP 1: Scanning FCS directories and building file list")
+print("=" * 60)
 
 file_list = []
-# B1: HIV W0/W48
-for pid in [1,3,5,6,7,8,9,10,12,13,14,15]:
-    for tp, label in [('Basal','HIV_W0'),('W48','HIV_W48')]:
-        f = os.path.join(BASE,'B1',f'norm_export_{pid} {tp}_CD3 subset.fcs')
-        if os.path.exists(f): file_list.append({'file':f,'patient':f'P{pid}','group':label})
-# B1: PrEP
-for pid in [18,19,22,23,27,28,30,31,32,33]:
-    f = os.path.join(BASE,'B1',f'norm_export_{pid} Basal_CD3 subset.fcs')
-    if os.path.exists(f): file_list.append({'file':f,'patient':f'P{pid}','group':'PrEP'})
-# B2: HIV P20/P25
-for pid in [20,25]:
-    for tp, label in [('BASAL','HIV_W0'),('W48','HIV_W48')]:
-        f = os.path.join(BASE,'B2',f'norm_export_{pid}{tp}_CD3 subset.fcs')
-        if os.path.exists(f): file_list.append({'file':f,'patient':f'P{pid}','group':label})
-# B2: HC
-for pid in [39,41,43,45,46,47]:
-    f = os.path.join(BASE,'B2',f'norm_export_{pid}HC_CD3 subset.fcs')
-    if os.path.exists(f): file_list.append({'file':f,'patient':f'P{pid}','group':'HC'})
-# B3: HC (no P88)
-for pid in [70,76,80,83,85,100]:
-    f = os.path.join(BASE,'B3',f'norm_export_{pid}_CD3 subset.fcs')
-    if os.path.exists(f): file_list.append({'file':f,'patient':f'P{pid}','group':'HC'})
 
-print(f"Built file list: {len(file_list)} files")
+# --- B1: HIV (W0 + W48) + PrEP ---
+b1_dir = os.path.join(FCS_DIR, 'B1')
+for f in sorted(os.listdir(b1_dir)):
+    if f.startswith('.') or not f.endswith('.fcs'):
+        continue
+    m = re.match(r'norm_export_(\d+)\s*(Basal|W48)_CD3', f)
+    if not m:
+        continue
+    pid = int(m.group(1))
+    tp = 'W0' if m.group(2) == 'Basal' else 'W48'
+    if pid in HIV_PATIENTS:
+        group, timepoint = 'HIV', tp
+    elif pid in PREP_PATIENTS:
+        group, timepoint = 'PrEP', 'W0'
+    else:
+        continue
+    file_list.append({'file': os.path.join(b1_dir, f),
+                      'patient': pid, 'group': group,
+                      'timepoint': timepoint, 'batch': 'B1'})
+
+# --- B2: HIV P20/P25 + HC (skip bridge duplicates) ---
+b2_dir = os.path.join(FCS_DIR, 'B2')
+for f in sorted(os.listdir(b2_dir)):
+    if f.startswith('.') or not f.endswith('.fcs'):
+        continue
+    # HIV BASAL / W48
+    m = re.match(r'norm_export_(\d+)(BASAL|W48)_CD3', f)
+    if m:
+        pid = int(m.group(1))
+        if pid not in HIV_PATIENTS:
+            continue
+        tp = 'W0' if m.group(2) == 'BASAL' else 'W48'
+        file_list.append({'file': os.path.join(b2_dir, f),
+                          'patient': pid, 'group': 'HIV',
+                          'timepoint': tp, 'batch': 'B2'})
+        continue
+    # PrEP bridge duplicates (P27prep, P33prep) -> skip
+    if re.match(r'norm_export_\d+prep_CD3', f):
+        continue
+    # HC
+    m = re.match(r'norm_export_(\d+)HC_CD3', f)
+    if m:
+        pid = int(m.group(1))
+        if pid == 44:
+            continue
+        if pid in HC_PATIENTS:
+            file_list.append({'file': os.path.join(b2_dir, f),
+                              'patient': pid, 'group': 'HC',
+                              'timepoint': 'W0', 'batch': 'B2'})
+
+# --- B3: HC (skip duplicates of B1/B2 samples) ---
+b3_dir = os.path.join(FCS_DIR, 'B3')
+for f in sorted(os.listdir(b3_dir)):
+    if f.startswith('.') or not f.endswith('.fcs'):
+        continue
+    if 'VD subset' in f:
+        continue
+    m = re.match(r'norm_export_(\d+)_CD3 subset\.fcs', f)
+    if not m:
+        continue
+    pid = int(m.group(1))
+    if pid == 44 or pid in [43, 47, 33]:
+        continue
+    if pid in HC_PATIENTS:
+        file_list.append({'file': os.path.join(b3_dir, f),
+                          'patient': pid, 'group': 'HC',
+                          'timepoint': 'W0', 'batch': 'B3'})
+
+print(f"  Total samples found: {len(file_list)}")
+for g in ['HC', 'PrEP', 'HIV']:
+    n = sum(1 for fl in file_list if fl['group'] == g)
+    print(f"    {g}: {n}")
+
+with open(os.path.join(OUTPUT_DIR, 'flowsom_filelist.json'), 'w') as jf:
+    json.dump(file_list, jf, indent=2)
+
+
+# ============================================================
+# Step 2: Read FCS, subsample cells
+# ============================================================
+print("\n" + "=" * 60)
+print("STEP 2: Reading FCS files and subsampling cells")
+print("=" * 60)
 
 all_cells = []
+sample_labels = []
 sample_info = []
 
-for fl in file_list:
-    meta, data = fcsparser.parse(fl['file'], reformat_meta=True)
-    avail = [m for m in clustering_markers if m in data.columns]
-    if len(avail) < len(clustering_markers): continue
+for i, fl in enumerate(file_list):
+    fname = os.path.basename(fl['file'])
+    print(f"  [{i+1:>2}/{len(file_list)}] "
+          f"P{fl['patient']} {fl['group']} {fl['timepoint']} -- {fname}")
 
-    cell_data = data[clustering_markers].dropna().values
+    _, data = fcsparser.parse(fl['file'], reformat_meta=True)
+    available = [m for m in clustering_markers if m in data.columns]
+    if len(available) < len(clustering_markers):
+        missing = set(clustering_markers) - set(available)
+        print(f"    WARNING: missing markers in this FCS: {missing}")
+    cell_data = data[available].copy().dropna()
 
     n = len(cell_data)
     if n > CELLS_PER_SAMPLE:
         idx = np.random.choice(n, CELLS_PER_SAMPLE, replace=False)
-        cell_data = cell_data[idx]
+        cell_data = cell_data.iloc[idx]
 
-    all_cells.append(cell_data)
-    sample_info.append({'patient': fl['patient'], 'group': fl['group'], 'file': os.path.basename(fl['file']), 'n_cells': len(cell_data)})
-    print(f"  [{len(sample_info)}] {fl['patient']} ({fl['group']}): {n} -> {len(cell_data)}")
+    all_cells.append(cell_data.values)
+    sample_labels.extend([i] * len(cell_data))
+    sample_info.append({
+        'sample_idx': i,
+        'patient': fl['patient'],
+        'group': fl['group'],
+        'timepoint': fl['timepoint'],
+        'batch': fl['batch'],
+        'n_cells_total': n,
+        'n_cells_sampled': len(cell_data),
+        'label': f"P{fl['patient']}_{fl['group']}_{fl['timepoint']}",
+    })
 
 combined = np.vstack(all_cells)
-sample_labels = []
-for i, cells in enumerate(all_cells):
-    sample_labels.extend([i] * len(cells))
 sample_labels = np.array(sample_labels)
+print(f"\n  Pooled cells: {combined.shape[0]:,} | "
+      f"{len(sample_info)} samples | {combined.shape[1]} markers")
 
-print(f"\nTotal: {combined.shape[0]} cells, {len(sample_info)} samples, {combined.shape[1]} markers")
-for g in ['HC','PrEP','HIV_W0','HIV_W48']:
-    n = sum(1 for s in sample_info if s['group'] == g)
-    print(f"  {g}: {n}")
 
 # ============================================================
-print("\nTraining MiniSom...")
+# Step 3: Standardise + train MiniSom
+# ============================================================
+print("\n" + "=" * 60)
+print(f"STEP 3: Training MiniSom ({SOM_X}x{SOM_Y} grid)")
+print("=" * 60)
+
 scaler = StandardScaler()
 combined_scaled = scaler.fit_transform(combined)
 
 som = MiniSom(SOM_X, SOM_Y, combined_scaled.shape[1],
               sigma=2.0, learning_rate=0.5,
-              neighborhood_function='gaussian', random_seed=42)
+              neighborhood_function='gaussian',
+              random_seed=SEED)
 som.pca_weights_init(combined_scaled)
-som.train(combined_scaled, num_iteration=combined_scaled.shape[0],
-          random_order=True, verbose=False)
-print(f"  QE: {som.quantization_error(combined_scaled):.4f}")
+print("  SOM initialised with PCA weights")
 
-# Nodes -> MC
+som.train(combined_scaled,
+          num_iteration=combined_scaled.shape[0],
+          random_order=True, verbose=False)
+
+qe = som.quantization_error(combined_scaled)
+print(f"  Quantization error: {qe:.4f}")
+
+
+# ============================================================
+# Step 4: Assign cells to SOM nodes
+# ============================================================
+print("\n" + "=" * 60)
+print("STEP 4: Assigning cells to SOM nodes")
+print("=" * 60)
+
 winners = np.array([som.winner(x) for x in combined_scaled])
 node_ids = winners[:, 0] * SOM_Y + winners[:, 1]
 n_nodes = SOM_X * SOM_Y
+node_counts = np.bincount(node_ids, minlength=n_nodes)
+print(f"  {n_nodes} nodes | cells/node: "
+      f"min={node_counts.min()}, max={node_counts.max()}, "
+      f"median={int(np.median(node_counts))}")
 
-node_profiles = np.zeros((n_nodes, combined_scaled.shape[1]))
+
+# ============================================================
+# Step 5: Ward metaclustering of SOM nodes
+# ============================================================
+print("\n" + "=" * 60)
+print(f"STEP 5: Hierarchical metaclustering into {N_METACLUSTERS} MCs")
+print("=" * 60)
+
+node_profiles_scaled = np.zeros((n_nodes, combined_scaled.shape[1]))
+node_profiles_orig   = np.zeros((n_nodes, combined.shape[1]))
 for nid in range(n_nodes):
     mask = node_ids == nid
     if mask.sum() > 0:
-        node_profiles[nid] = combined_scaled[mask].mean(axis=0)
+        node_profiles_scaled[nid] = combined_scaled[mask].mean(axis=0)
+        node_profiles_orig[nid]   = combined[mask].mean(axis=0)
 
-node_link = linkage(node_profiles, method='ward', metric='euclidean')
-mc_assign = fcluster(node_link, t=N_MC, criterion='maxclust')
-cell_mc = mc_assign[node_ids]
+node_linkage = linkage(node_profiles_scaled, method='ward', metric='euclidean')
+metacluster_assignments = fcluster(node_linkage,
+                                   t=N_METACLUSTERS, criterion='maxclust')
+
+for mc in range(1, N_METACLUSTERS + 1):
+    nodes_in_mc = np.where(metacluster_assignments == mc)[0]
+    cells_in_mc = sum(node_counts[n] for n in nodes_in_mc)
+    print(f"  MC{mc:>2}: {len(nodes_in_mc):>3} nodes, {cells_in_mc:>6} cells")
+
+cell_metaclusters = metacluster_assignments[node_ids]
+
 
 # ============================================================
-# Frequencies
+# Step 6: Per-sample frequencies + per-MC marker profiles
+# ============================================================
+print("\n" + "=" * 60)
+print("STEP 6: Computing MC frequencies and marker profiles")
+print("=" * 60)
+
 n_samples = len(sample_info)
-freq_matrix = np.zeros((n_samples, N_MC))
+freq_matrix = np.zeros((n_samples, N_METACLUSTERS))
 for i in range(n_samples):
     mask = sample_labels == i
-    sample_mc = cell_mc[mask]
-    counts = np.bincount(sample_mc, minlength=N_MC+1)[1:]
+    sample_mc = cell_metaclusters[mask]
+    counts = np.bincount(sample_mc, minlength=N_METACLUSTERS + 1)[1:]
     freq_matrix[i] = counts / counts.sum() * 100
 
-labels = [f"{s['patient']}_{s['group']}" for s in sample_info]
-mc_cols = [f'MC{i+1}' for i in range(N_MC)]
-freq_df = pd.DataFrame(freq_matrix, index=labels, columns=mc_cols)
+freq_df = pd.DataFrame(
+    freq_matrix,
+    index=[s['label'] for s in sample_info],
+    columns=[f'MC{i+1}' for i in range(N_METACLUSTERS)],
+)
+print(f"  Frequency matrix: {freq_df.shape} | "
+      f"row sums {freq_df.sum(axis=1).min():.1f}-{freq_df.sum(axis=1).max():.1f}%")
 
-# MC profiles (scaled)
-mc_profiles = np.zeros((N_MC, len(clustering_markers)))
-for mc in range(N_MC):
-    mask = cell_mc == mc+1
+mc_profiles_scaled = np.zeros((N_METACLUSTERS, len(clustering_markers)))
+mc_profiles_orig   = np.zeros((N_METACLUSTERS, len(clustering_markers)))
+for mc in range(N_METACLUSTERS):
+    mask = cell_metaclusters == mc + 1
     if mask.sum() > 0:
-        mc_profiles[mc] = combined_scaled[mask].mean(axis=0)
+        mc_profiles_scaled[mc] = combined_scaled[mask].mean(axis=0)
+        mc_profiles_orig[mc]   = combined[mask].mean(axis=0)
 
-# MC profiles (original scale)
-mc_profiles_orig = np.zeros((N_MC, len(clustering_markers)))
-for mc in range(N_MC):
-    mask = cell_mc == mc+1
-    if mask.sum() > 0:
-        mc_profiles_orig[mc] = combined[mask].mean(axis=0)
+# Heuristic lineage labels (refined manually downstream)
+mc_annotations = []
+for mc in range(N_METACLUSTERS):
+    profile = mc_profiles_scaled[mc]
+    cd4_val = profile[clustering_markers.index('CD4')]
+    cd8_val = profile[clustering_markers.index('CD8')]
+    if cd4_val > 0.5 and cd8_val < -0.5:
+        lineage = 'CD4+'
+    elif cd8_val > 0.5 and cd4_val < -0.5:
+        lineage = 'CD8+'
+    elif cd4_val > 0 and cd8_val > 0:
+        lineage = 'DP'
+    else:
+        lineage = 'DN/mix'
+    mc_annotations.append(f"MC{mc+1} ({lineage})")
 
-# ============================================================
-# Stats: KW + pairwise
-groups_arr = np.array([s['group'] for s in sample_info])
-results = []
-for mc in range(N_MC):
-    gd = {g: freq_matrix[groups_arr==g, mc] for g in ['HC','PrEP','HIV_W0','HIV_W48']}
-    try:
-        _, kw_p = kruskal(*[v for v in gd.values() if len(v) > 0])
-    except:
-        kw_p = 1.0
-
-    pairwise = {}
-    for g1, g2 in [('PrEP','HC'), ('PrEP','HIV_W0'), ('PrEP','HIV_W48'),
-                    ('HIV_W0','HC'), ('HIV_W0','HIV_W48')]:
-        try:
-            _, p = mannwhitneyu(gd[g1], gd[g2], alternative='two-sided')
-        except:
-            p = 1.0
-        pairwise[f'{g1}_vs_{g2}'] = p
-
-    row = {'MC': f'MC{mc+1}', 'PrEP': gd['PrEP'].mean(), 'HC': gd['HC'].mean(),
-           'HIV_W0': gd['HIV_W0'].mean(), 'HIV_W48': gd['HIV_W48'].mean(), 'KW_p': kw_p}
-    row.update(pairwise)
-    results.append(row)
-
-res_df = pd.DataFrame(results)
-res_df['KW_padj'] = bh_adjust(res_df['KW_p'].values)
-
-# Adjust pairwise p-values
-for col in [c for c in res_df.columns if '_vs_' in c]:
-    res_df[col + '_adj'] = bh_adjust(res_df[col].values)
-
-n_sig = (res_df['KW_padj'] < 0.05).sum()
-print(f"\nKW significant: {n_sig}/{N_MC}")
-
-# Print sorted results
-print(f"\n{'MC':<6} {'PrEP':>6} {'HC':>6} {'W0':>6} {'W48':>6} {'KW_padj':>8}")
-print("-"*45)
-for _, r in res_df.sort_values('KW_p').iterrows():
-    sig = '***' if r['KW_padj']<0.001 else '**' if r['KW_padj']<0.01 else '*' if r['KW_padj']<0.05 else ''
-    print(f"{r['MC']:<6} {r['PrEP']:>6.1f} {r['HC']:>6.1f} {r['HIV_W0']:>6.1f} {r['HIV_W48']:>6.1f} {r['KW_padj']:>8.4f} {sig}")
 
 # ============================================================
-# Heatmap
-fig, ax = plt.subplots(figsize=(14, 12))
-cmap = LinearSegmentedColormap.from_list('c', ['#0A1F5D','white','#6A0624'])
-order = res_df.sort_values('KW_padj').index.values
-im = ax.imshow(mc_profiles[order], cmap=cmap, aspect='auto', vmin=-2, vmax=2)
-ax.set_yticks(range(N_MC))
-ylabels = []
-for i in range(N_MC):
-    mi = order[i]
-    p = res_df.iloc[mi]['KW_padj']
-    s = '***' if p<0.001 else '**' if p<0.01 else '*' if p<0.05 else ''
-    ylabels.append(f"MC{mi+1} {s}")
-ax.set_yticklabels(ylabels, fontsize=10)
-ax.set_xticks(range(len(clustering_markers)))
-ax.set_xticklabels(clustering_markers, rotation=45, ha='right', fontsize=10)
-ax.set_title('CD3+ MiniSom — 20 MC, 14 markers, 50 samples\nSorted by KW p-value', fontsize=13)
-plt.colorbar(im, ax=ax, label='Z-scored expression', shrink=0.8)
-plt.tight_layout()
-plt.savefig(os.path.join(outdir, 'CD3_Heatmap_MiniSom_50files.png'), dpi=200)
-plt.close()
-
+# Save outputs
 # ============================================================
-# Dendrogram (raw Euclidean — ORIGINAL method, no CLR)
-patient_link = linkage(freq_matrix, method='ward', metric='euclidean')
-fig, ax = plt.subplots(figsize=(20, 7))
-cm = {'PrEP':'#3E0080','HC':'#008000','HIV_W0':'#FFCD65','HIV_W48':'#808000'}
-short_labels = [f"{s['patient']}_{s['group'].split('_')[-1]}" if 'HIV' in s['group'] else s['patient'] for s in sample_info]
-dn = dendro_plot(patient_link, labels=short_labels, ax=ax, leaf_rotation=90, leaf_font_size=8)
-label_to_idx = {sl: j for j, sl in enumerate(short_labels)}
-for lbl in ax.get_xticklabels():
-    txt = lbl.get_text()
-    idx_m = label_to_idx[txt]
-    lbl.set_color(cm[sample_info[idx_m]['group']])
-    lbl.set_fontweight('bold')
-ax.set_title('CD3+ Patient Dendrogram — MiniSom 20 MC, Euclidean + Ward, 50 samples', fontsize=13)
-ax.set_ylabel('Ward Distance (Euclidean)')
-ax.legend(handles=[Patch(facecolor=c, label=g) for g,c in cm.items()], loc='upper right')
-plt.tight_layout()
-plt.savefig(os.path.join(outdir, 'CD3_Dendrogram_MiniSom_50files.png'), dpi=200)
-plt.close()
+freq_df.to_csv(os.path.join(OUTPUT_DIR, 'CD3_metacluster_frequencies.csv'))
 
-# ============================================================
-# Volcano data for each pairwise comparison
-for comp in [('PrEP','HC'), ('PrEP','HIV_W0'), ('PrEP','HIV_W48'), ('HIV_W0','HIV_W48'), ('HIV_W0','HC')]:
-    g1, g2 = comp
-    vol = pd.DataFrame()
-    vol['MC'] = res_df['MC']
-    vol[f'{g1}_mean'] = res_df[g1]
-    vol[f'{g2}_mean'] = res_df[g2]
-    vol['log2FC'] = np.log2((res_df[g1] + 0.01) / (res_df[g2] + 0.01))
-    pcol = f'{g1}_vs_{g2}'
-    vol['pvalue'] = res_df[pcol]
-    vol['padj'] = res_df[pcol + '_adj']
-    vol.to_csv(os.path.join(outdir, f'volcano_{g1}_vs_{g2}_50files.csv'), index=False)
+pd.DataFrame(mc_profiles_scaled,
+             index=[f'MC{i+1}' for i in range(N_METACLUSTERS)],
+             columns=clustering_markers
+             ).to_csv(os.path.join(OUTPUT_DIR, 'CD3_metacluster_profiles_zscored.csv'))
 
-# ============================================================
-# Save everything
-freq_df.to_csv(os.path.join(outdir, 'FlowSOM_CD3_frequencies_50files.csv'))
-res_df.to_csv(os.path.join(outdir, 'stats_cd3_50files.csv'), index=False)
-pd.DataFrame(mc_profiles, index=mc_cols, columns=clustering_markers).to_csv(
-    os.path.join(outdir, 'FlowSOM_CD3_profiles_50files.csv'))
-pd.DataFrame(mc_profiles_orig, index=mc_cols, columns=clustering_markers).to_csv(
-    os.path.join(outdir, 'FlowSOM_CD3_profiles_orig_50files.csv'))
-
-# Save pickle for downstream R scripts
-results_pkl = {
+results = {
     'freq_matrix': freq_matrix,
     'freq_df': freq_df,
     'sample_info': sample_info,
-    'mc_profiles_scaled': mc_profiles,
+    'mc_profiles_scaled': mc_profiles_scaled,
     'mc_profiles': mc_profiles_orig,
+    'mc_annotations': mc_annotations,
     'clustering_markers': clustering_markers,
-    'res_df': res_df,
+    'node_profiles_scaled': node_profiles_scaled,
+    'node_counts': node_counts,
+    'metacluster_assignments': metacluster_assignments,
+    'som': som,
+    'scaler': scaler,
+    'group_colors': group_colors,
 }
-with open(os.path.join(outdir, 'MiniSom_50files.pkl'), 'wb') as pf:
-    pickle.dump(results_pkl, pf)
+with open(os.path.join(OUTPUT_DIR, 'flowsom_results.pkl'), 'wb') as pf:
+    pickle.dump(results, pf)
 
-print(f"\nDONE — CD3 MiniSom 50 files → {outdir}")
+print(f"\n  Wrote frequencies, profiles, and complete pickle to {OUTPUT_DIR}/")
+print("\nDone.")

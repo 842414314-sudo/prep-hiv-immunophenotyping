@@ -29,7 +29,9 @@ np.random.seed(42)
 # ======================================================================
 FCS_DIR    = './normalized_fcs'
 OUTPUT_DIR = './output'
-DATA_DIR   = '../data/cd3'
+# DATA_DIR defaults to <repo>/data/cd3 relative to this script.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR    = os.path.normpath(os.path.join(_SCRIPT_DIR, '..', '..', 'data', 'cd3'))
 
 BASE = FCS_DIR
 FIG = os.path.join(OUTPUT_DIR, 'Fig')

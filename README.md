@@ -27,19 +27,22 @@ This repository contains the custom scripts and processed data used to perform u
 └── README.md
 ```
 
-## Script-to-Figure Mapping
+## Scripts
 
-| Script | Figures |
-|--------|---------|
-| `02_clustering/minisom_cd3_main.py` | Fig 1a-b (CD3 UMAP, metacluster overview) |
-| `02_clustering/minisom_cd4cd8_mcsweep.py` | Fig 2-3 (CD4/CD8 lineage-specific clustering) |
-| `03_differential_abundance/minisom_DA_full.py` | Fig 4 (differential abundance heatmaps, boxplots) |
-| `04_figures/dendro_cd3_unified.R` | Fig 1c (patient dendrogram + heatmap, CD3 level) |
-| `04_figures/dendro_cd4cd8_unified.R` | Fig 2-3 (CD4/CD8 patient dendrograms) |
-| `04_figures/volcano_prep.R` | Fig 5 (PrEP vs HC / PrEP vs HIV volcano plots) |
-| `04_figures/minisom_umap.py` | Supplementary UMAP panels |
-| `05_sensitivity/sensitivity_analysis.py` | Supplementary (parameter robustness) |
-| `05_sensitivity/reproduce_recovery_score.py` | Supplementary (IPR/IPNR classification) |
+| Script | What it does | Requires raw FCS? |
+|--------|--------------|-------------------|
+| `01_normalization/batch_norm_cd3_v11.R` | Cross-batch peak alignment + median shift for 9 markers on arcsinh-transformed fluorescence | Yes |
+| `02_clustering/minisom_cd3_main.py` | CD3 unsupervised clustering: 14-marker MiniSom (10×10, seed 42) + Ward hierarchical metaclustering into 20 MCs. Saves complete pickle for downstream scripts. | Yes |
+| `02_clustering/minisom_cd4cd8_mcsweep.py` | CD4/CD8 lineage-specific clustering with metacluster-count sweep (10/15/20 MCs); cophenetic correlation + ARI stability | Yes |
+| `03_differential_abundance/minisom_DA_full.py` | Pairwise differential abundance across 4 groups (Kruskal-Wallis, Mann-Whitney U, Wilcoxon signed-rank, BH-FDR); volcano + heatmap + boxplots | No (reads `data/`) |
+| `04_figures/dendro_cd3_unified.R` | CD3 patient-level dendrogram + metacluster heatmap (`pheatmap`, Ward.D2, Euclidean) | No |
+| `04_figures/dendro_cd4cd8_unified.R` | CD4 and CD8 patient-level dendrograms | No |
+| `04_figures/volcano_prep.R` | PrEP-vs-HC and PrEP-vs-HIV volcano plots | No |
+| `04_figures/minisom_umap.py` | UMAP embedding of CD3 cells (reads pickle from `minisom_cd3_main.py`); colored by metacluster / clinical group / marker | Yes |
+| `05_sensitivity/sensitivity_analysis.py` | Robustness sweep: SOM grid sizes, MC count, k values, distance/linkage variants, bootstrap | Yes |
+| `05_sensitivity/reproduce_recovery_score.py` | IPR/IPNR (Immunologic Profile Recovery / Non-Recovery) classification reproduction | Yes |
+
+Scripts marked "Requires raw FCS" expect the batch-normalised CD3+ FCS files (output of `batch_norm_cd3_v11.R`), which are **not included** in this repository (available on reasonable request). All other scripts run directly from the processed tables in `data/`.
 
 ## Data Files
 

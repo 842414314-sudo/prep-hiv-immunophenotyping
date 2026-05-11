@@ -4,10 +4,16 @@ library(ggplot2)
 
 # ======================================================================
 # USER CONFIG — update these paths to match your local setup
-# data_dir: directory containing CD3 data CSVs
-# output_dir: where figures will be saved
+# data_dir   : directory containing CD3 data CSVs. Default resolves to
+#              <repo>/data/cd3 relative to this script, so the script
+#              runs from any working directory.
+# output_dir : where figures will be saved
 # ======================================================================
-data_dir   <- "../data/cd3"
+.args       <- commandArgs(trailingOnly = FALSE)
+.this_file  <- sub("--file=", "", .args[grep("--file=", .args)])
+.script_dir <- if (length(.this_file) > 0)
+  dirname(normalizePath(.this_file[1])) else getwd()
+data_dir   <- file.path(.script_dir, "..", "..", "data", "cd3")
 output_dir <- "./output"
 
 outdir <- output_dir

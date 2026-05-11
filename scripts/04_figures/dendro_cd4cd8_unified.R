@@ -13,10 +13,16 @@ suppressMessages({
 
 # ======================================================================
 # USER CONFIG — update these paths to match your local setup
-# data_dir: root of the data/ directory (contains cd4/, cd8/ subdirs)
-# output_dir: where figures will be saved
+# data_dir   : root of data/ (contains cd4/, cd8/ subdirs). Default
+#              resolves to <repo>/data relative to this script, so the
+#              script runs from any working directory.
+# output_dir : where figures will be saved
 # ======================================================================
-data_dir   <- "../data"
+.args       <- commandArgs(trailingOnly = FALSE)
+.this_file  <- sub("--file=", "", .args[grep("--file=", .args)])
+.script_dir <- if (length(.this_file) > 0)
+  dirname(normalizePath(.this_file[1])) else getwd()
+data_dir   <- file.path(.script_dir, "..", "..", "data")
 output_dir <- "./output"
 
 indir   <- data_dir
