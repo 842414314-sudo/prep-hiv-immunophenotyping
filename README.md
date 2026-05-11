@@ -32,12 +32,12 @@ This repository contains the custom scripts and processed data used to perform u
 | Script | Figures |
 |--------|---------|
 | `02_clustering/minisom_cd3_main.py` | Fig 1a-b (CD3 UMAP, metacluster overview) |
-| `02_clustering/flowsom_cd4cd8_mcsweep.py` | Fig 2-3 (CD4/CD8 lineage-specific clustering) |
-| `03_differential_abundance/flowsom_DA_full.py` | Fig 4 (differential abundance heatmaps, boxplots) |
+| `02_clustering/minisom_cd4cd8_mcsweep.py` | Fig 2-3 (CD4/CD8 lineage-specific clustering) |
+| `03_differential_abundance/minisom_DA_full.py` | Fig 4 (differential abundance heatmaps, boxplots) |
 | `04_figures/dendro_cd3_unified.R` | Fig 1c (patient dendrogram + heatmap, CD3 level) |
 | `04_figures/dendro_cd4cd8_unified.R` | Fig 2-3 (CD4/CD8 patient dendrograms) |
 | `04_figures/volcano_prep.R` | Fig 5 (PrEP vs HC / PrEP vs HIV volcano plots) |
-| `04_figures/flowsom_umap.py` | Supplementary UMAP panels |
+| `04_figures/minisom_umap.py` | Supplementary UMAP panels |
 | `05_sensitivity/sensitivity_analysis.py` | Supplementary (parameter robustness) |
 | `05_sensitivity/reproduce_recovery_score.py` | Supplementary (IPR/IPNR classification) |
 
@@ -63,7 +63,7 @@ Pairwise group comparisons with Benjamini-Hochberg FDR correction.
 
 2. **Unsupervised clustering** (`minisom_cd3_main.py`): 14-marker MiniSom (10x10 SOM, seed 42) on 5000 cells/sample, Ward hierarchical linkage into 20 metaclusters. CD4/CD8 lineage split followed by independent 10-MC clustering.
 
-3. **Differential abundance** (`flowsom_DA_full.py`): Kruskal-Wallis across 4 groups, pairwise Mann-Whitney U (unpaired) and Wilcoxon signed-rank (paired HIV W0 vs W48), arcsine-sqrt transformation for effect sizes, BH-FDR correction.
+3. **Differential abundance** (`minisom_DA_full.py`): Kruskal-Wallis across 4 groups, pairwise Mann-Whitney U (unpaired) and Wilcoxon signed-rank (paired HIV W0 vs W48), arcsine-sqrt transformation for effect sizes, BH-FDR correction.
 
 4. **Visualization**: Patient-level dendrograms (R `pheatmap`, Ward.D2, Euclidean distance), UMAP (Python `umap-learn`), volcano plots (R).
 
@@ -90,7 +90,7 @@ Scripts contain a `USER CONFIG` section at the top where input/output paths shou
 To reproduce the differential abundance analysis (Fig 4) from the repository root:
 ```
 pip install -r requirements.txt
-python scripts/03_differential_abundance/flowsom_DA_full.py
+python scripts/03_differential_abundance/minisom_DA_full.py
 ```
 The script resolves `data/` relative to its own location, so it can be run from any working directory.
 
