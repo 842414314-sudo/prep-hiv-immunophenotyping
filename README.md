@@ -96,7 +96,11 @@ The script resolves `data/` relative to its own location, so it can be run from 
 
 ### Note on sample inclusion (P88)
 
-Unsupervised clustering (SOM training and CD4/CD8 lineage subclustering) used 51 samples to maximise cluster stability. Sample **P88** was excluded from all downstream differential abundance analyses (final analysis n=50; HC n=12, PrEP n=10, HIV W0 n=14, HIV W48 n=14). Scripts under `02_clustering/` reference the 51-sample training set; the per-patient frequency tables under `data/` and all statistical analyses use the 50-sample analysis set.
+Sample **P88** (a CMV-seropositive healthy control) was excluded from the primary analyses reported in the manuscript (final analysis n=50; HC n=12, PrEP n=10, HIV W0 n=14, HIV W48 n=14).
+
+- The **per-patient frequency tables** in `data/*/` (`*_frequencies.csv`) are the analysis tables: 50 samples, P88 excluded, consistent with the manuscript.
+- Unsupervised clustering scripts under `02_clustering/` were trained on the full 51-sample set (HC n=13, including P88) because deterministic FCS file ordering by the MiniSom training script required a fixed input list. P88 was then excluded prior to downstream analysis.
+- The exploratory **differential abundance tables** (`data/*/*_da_results.csv`) were generated from the 51-sample clustering output for transparency only; they are *not* the primary statistics reported in the manuscript. The metacluster analyses in this repository are supplementary to the manual gating results described in the manuscript.
 
 ## License
 
