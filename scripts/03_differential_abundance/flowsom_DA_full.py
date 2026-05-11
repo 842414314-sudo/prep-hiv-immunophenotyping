@@ -45,11 +45,15 @@ warnings.filterwarnings('ignore')
 
 # ======================================================================
 # USER CONFIG — update these paths to match your local setup
-# DATA_DIR: root of the data/ directory
+# DATA_DIR: root of the data/ directory.
+#           Default resolves to <repo>/data based on this script's location,
+#           so the script runs from any working directory. Override if your
+#           data lives elsewhere.
 # OUTPUT_DIR: where DA results and figures will be saved
 # ======================================================================
-DATA_DIR   = '../data'
-OUTPUT_DIR = './output'
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR    = os.path.normpath(os.path.join(_SCRIPT_DIR, '..', '..', 'data'))
+OUTPUT_DIR  = './output'
 
 # ============================================================
 # Config

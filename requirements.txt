@@ -1,0 +1,17 @@
+# Python dependencies for analysis scripts.
+# Tested with Python 3.9.
+#
+# Versions are unpinned; the analysis is not sensitive to minor version
+# differences except for `minisom` (deterministic seed-based output) and
+# `umap-learn` (embedding layout). For exact reproduction of figures use
+# the versions listed below.
+
+numpy>=1.23
+pandas>=1.5
+scipy>=1.9
+scikit-learn>=1.1
+matplotlib>=3.6
+minisom>=2.3.1
+fcsparser>=0.2.4
+umap-learn>=0.5.3
+adjustText>=0.8

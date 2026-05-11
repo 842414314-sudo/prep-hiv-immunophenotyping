@@ -72,9 +72,11 @@ Pairwise group comparisons with Benjamini-Hochberg FDR correction.
 ## Requirements
 
 ### Python (>= 3.9)
+See [`requirements.txt`](requirements.txt). Install with:
 ```
-numpy, pandas, scipy, scikit-learn, minisom, fcsparser, umap-learn, matplotlib
+pip install -r requirements.txt
 ```
+Core packages: `numpy`, `pandas`, `scipy`, `scikit-learn`, `matplotlib`, `minisom`, `fcsparser`, `umap-learn`, `adjustText`.
 
 ### R (>= 4.2)
 ```
@@ -84,6 +86,17 @@ flowCore, pheatmap, grid, ggplot2
 ## Usage
 
 Scripts contain a `USER CONFIG` section at the top where input/output paths should be updated. The `data/` directory contains all processed tables needed to reproduce statistical analyses and figures without access to raw FCS files.
+
+To reproduce the differential abundance analysis (Fig 4) from the repository root:
+```
+pip install -r requirements.txt
+python scripts/03_differential_abundance/flowsom_DA_full.py
+```
+The script resolves `data/` relative to its own location, so it can be run from any working directory.
+
+### Note on sample inclusion (P88)
+
+Unsupervised clustering (SOM training and CD4/CD8 lineage subclustering) used 51 samples to maximise cluster stability. Sample **P88** was excluded from all downstream differential abundance analyses (final analysis n=50; HC n=12, PrEP n=10, HIV W0 n=14, HIV W48 n=14). Scripts under `02_clustering/` reference the 51-sample training set; the per-patient frequency tables under `data/` and all statistical analyses use the 50-sample analysis set.
 
 ## License
 
